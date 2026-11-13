@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Studio · 每集成片</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f6f5;
+      --panel: #ffffff;
+      --line: rgba(35, 70, 64, 0.12);
+      --text: #1f2d29;
+      --muted: #7b8782;
+      --accent: #0f7867;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e1214;
+        --panel: #161c1f;
+        --line: rgba(255, 255, 255, 0.08);
+        --text: #dfe7e4;
+        --muted: #8b9894;
+        --accent: #5fd0b8;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 system-ui, "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+    main { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+    header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 20px; }
+    header small { color: var(--muted); }
+    header .tools { display: flex; gap: 8px; margin-left: auto; }
+    button, .btn {
+      display: inline-flex; align-items: center; height: 28px; padding: 0 12px;
+      border: 1px solid var(--line); border-radius: 999px; background: var(--panel);
+      color: var(--text); font: inherit; font-size: 12px; text-decoration: none; cursor: pointer;
+    }
+    button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
+    section.series { margin-top: 22px; }
+    h2 { margin: 0 0 8px; font-size: 16px; }
+    h3 { margin: 14px 0 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+    ol { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+    li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; padding: 10px 14px; }
+    li + li { border-top: 1px solid var(--line); }
+    li a.title { color: var(--accent); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+    li a.title:hover { text-decoration: underline; }
+    li .meta { grid-column: 1; color: var(--muted); font-size: 12px; }
+    li .links { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 10px; }
+    li .links a { color: var(--muted); font-size: 12px; text-decoration: none; }
+    li .links a:hover { color: var(--accent); }
+    .empty, .error { color: var(--muted); padding: 30px 0; text-align: center; }
+    .error { color: #c0392b; }
+    .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>每集成片</h1>
+      <small id="summary"></small>
+      <div class="tools">
+        <button type="button" id="copyAll">复制全部链接</button>
+        <a class="btn" href="/ai-studio">回到 AI Studio</a>
+      </div>
+    </header>
+    <div id="list"><p class="empty">正在读取…</p></div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script>
+    const listEl = document.getElementById("list");
+    const summaryEl = document.getElementById("summary");
+    const toastEl = document.getElementById("toast");
+    let allLinks = [];
+    const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+    const mediaUrl = (job, kind) => `${location.origin}/api/tools/ai-studio/media/${encodeURIComponent(job.id)}/${kind}`;
+    const duration = (seconds) => {
+      const value = Math.round(Number(seconds) || 0);
+      return value >= 60 ? `${Math.floor(value / 60)} 分 ${value % 60} 秒` : `${value} 秒`;
+    };
+
+    function render(state) {
+      const finals = (state.jobs || []).filter((job) => job.final && job.status === "done" && job.has?.video);
+      const latest = new Map();
+      finals.forEach((job) => {
+        const current = latest.get(job.episode);
+        if (!current || String(job.created_at) > String(current.created_at)) latest.set(job.episode, job);
+      });
+      allLinks = [];
+      let count = 0;
+      const html = (state.series || []).map((series) => {
+        const episodes = (series.episodes || []).filter((episode) => latest.has(episode.id));
+        if (!episodes.length) return "";
+        const groups = [...(series.groups || []), { id: "", name: "未分组" }];
+        const body = groups.map((group) => {
+          const items = episodes.filter((episode) => group.id ? episode.group === group.id : !(series.groups || []).some((item) => item.id === episode.group));
+          if (!items.length) return "";
+          return `${group.id || groups.length > 1 ? `<h3>${escapeHtml(group.name)}</h3>` : ""}<ol>${items.map((episode) => {
+            const job = latest.get(episode.id);
+            const url = mediaUrl(job, "video");
+            const versions = finals.filter((item) => item.episode === episode.id).length;
+            count += 1;
+            allLinks.push(`${episode.title}\n${url}`);
+            return `<li>
+              <a class="title" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(episode.title)}</a>
+              <span class="meta">${escapeHtml([duration(job.seconds), String(job.created_at || "").replace("T", " ").slice(0, 16) + " 合成", versions > 1 ? `共 ${versions} 版，这是最新一版` : ""].filter(Boolean).join(" · "))}</span>
+              <span class="links">
+                <a href="${escapeHtml(url)}" download>下载</a>
+                ${job.has?.srt ? `<a href="${escapeHtml(mediaUrl(job, "srt"))}" download>字幕</a>` : ""}
+                ${job.has?.voice_track ? `<a href="${escapeHtml(mediaUrl(job, "voice_track"))}" download>配音轨</a>` : ""}
+                ${job.has?.music_track ? `<a href="${escapeHtml(mediaUrl(job, "music_track"))}" download>配乐轨</a>` : ""}
+              </span>
+            </li>`;
+          }).join("")}</ol>`;
+        }).join("");
+        return `<section class="series"><h2>${escapeHtml(series.name)}</h2>${body}</section>`;
+      }).join("");
+      summaryEl.textContent = count ? `${count} 集已合成，点标题直接播放` : "";
+      listEl.innerHTML = html || `<p class="empty">还没有合成好的成片。在 AI Studio 的分集里点「合成成片」后会出现在这里。</p>`;
+    }
+
+    function toast(text) {
+      toastEl.textContent = text;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 1800);
+    }
+
+    document.getElementById("copyAll").addEventListener("click", async () => {
+      if (!allLinks.length) return toast("还没有成片");
+      try {
+        await navigator.clipboard.writeText(allLinks.join("\n\n"));
+        toast(`已复制 ${allLinks.length} 条链接`);
+      } catch {
+        toast("浏览器不允许复制（需要 https 或 localhost）");
+      }
+    });
+
+    fetch("/api/tools/ai-studio", { cache: "no-store" })
+      .then((response) => response.json())
+      .then(render)
+      .catch((error) => { listEl.innerHTML = `<p class="error">读取失败：${escapeHtml(error.message)}</p>`; });
+  </script>
+</body>
+</html>

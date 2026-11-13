@@ -1,0 +1,15 @@
+.env
+.venv/
+.venvs/
+/ComfyUI/
+/vendor/
+/models/
+/data/
+assets/fonts/*.otf
+assets/fonts/*.ttf
+assets/fonts/*.ttc
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+*.part[0-9]*

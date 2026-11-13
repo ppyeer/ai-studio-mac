@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="night" data-theme-palette="original">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("aiStudioTheme") === "day" ? "day" : "night";
+      } catch {}
+    </script>
+    <link rel="stylesheet" href="/ai-studio.css">
+    <script defer src="/ai-studio.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="loading"><div><div class="loading-mark"></div><p role="status">正在打开 AI Studio…</p></div></div>
+    </div>
+  </body>
+</html>
