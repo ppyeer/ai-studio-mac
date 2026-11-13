@@ -4,6 +4,7 @@
     python3 scripts/download_models.py                # 视频 + 图片模型（约 52 GB）
     python3 scripts/download_models.py --voice        # 另加配音 IndexTTS-2.5（ModelScope，约 6 GB）和人声分离模型
     python3 scripts/download_models.py --only voice   # 只下配音
+    python3 scripts/download_models.py --only voice --from-github   # 配音模型从私有仓库 ppyeer/ai-studio-models 的 Release 取（需 gh auth login）
 国内网络：export HF_ENDPOINT=https://hf-mirror.com
 """
 import argparse
@@ -38,6 +39,8 @@ VOICE_DIR = Path(os.environ.get("INDEXTTS_MODEL_DIR") or ROOT / "models" / "Inde
 SEPARATOR_DIR = Path(os.environ.get("AI_STUDIO_SEPARATOR_MODELS") or ROOT / "models" / "separator").expanduser()
 SEPARATOR = Path(os.environ.get("AI_STUDIO_SEPARATOR") or ROOT / ".venvs" / "tools" / "bin" / "audio-separator").expanduser()
 TOKEN = os.environ.get("HF_TOKEN") or ""
+MODELS_REPO = os.environ.get("AI_STUDIO_MODELS_REPO") or "ppyeer/ai-studio-models"
+MODELS_RELEASE = "indextts-2.5"
 PIECES = 8
 
 # (仓库, 仓库里的路径, ComfyUI models 下的目录)
@@ -157,18 +160,62 @@ def download_voice():
         print("没装人声分离工具（scripts/install.sh 不带 --no-tools 会装），跳过分离模型", flush=True)
 
 
+def download_voice_github():
+    """从私有仓库 Release 取 IndexTTS-2.5 和人声分离模型（需要 gh auth login）。"""
+    staging = VOICE_DIR.parent / ".voice-download"
+    staging.mkdir(parents=True, exist_ok=True)
+    need_voice = not ((VOICE_DIR / "gpt.pth").is_file() and (VOICE_DIR / "hf_cache" / "w2v-bert-2.0" / "model.safetensors").is_file())
+    need_separator = not (SEPARATOR_DIR / SEPARATOR_MODEL).is_file()
+    patterns = ["SHA256SUMS"]
+    if need_voice:
+        patterns.append("IndexTTS-2.5.tar.part-*")
+    if need_separator:
+        patterns.append("model_bs_roformer_*")
+    if len(patterns) == 1:
+        print("配音模型和人声分离模型都已就位", flush=True)
+        return
+    command = ["gh", "release", "download", MODELS_RELEASE, "-R", MODELS_REPO, "-D", str(staging), "--skip-existing"]
+    for pattern in patterns:
+        command += ["-p", pattern]
+    print("从", MODELS_REPO, "下载", " ".join(patterns[1:]), flush=True)
+    subprocess.run(command, check=True)
+    checker = ["sha256sum", "-c", "--ignore-missing"] if subprocess.run(["which", "sha256sum"], capture_output=True).returncode == 0 \
+        else ["shasum", "-a", "256", "-c", "--ignore-missing"]
+    print("校验文件", flush=True)
+    subprocess.run(checker + ["SHA256SUMS"], cwd=staging, check=True)
+    if need_voice:
+        VOICE_DIR.mkdir(parents=True, exist_ok=True)
+        parts = sorted(staging.glob("IndexTTS-2.5.tar.part-*"))
+        print("解包到", VOICE_DIR, flush=True)
+        cat = subprocess.Popen(["cat", *map(str, parts)], stdout=subprocess.PIPE)
+        subprocess.run(["tar", "-xf", "-", "-C", str(VOICE_DIR), "--strip-components=1"], stdin=cat.stdout, check=True)
+        cat.stdout.close()
+        if cat.wait():
+            raise SystemExit("拼接切片失败")
+        for part in parts:
+            part.unlink()
+    if need_separator:
+        SEPARATOR_DIR.mkdir(parents=True, exist_ok=True)
+        for source in staging.glob("model_bs_roformer_*"):
+            source.replace(SEPARATOR_DIR / source.name)
+    print("配音模型就位", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--voice", action="store_true", help="另外下载配音和人声分离模型")
     parser.add_argument("--only", choices=["video", "image", "voice"], help="只下其中一类")
+    parser.add_argument("--from-github", action="store_true", help=f"配音模型改从 {MODELS_REPO} 的 Release 下载（需 gh 登录）")
     args = parser.parse_args()
-    groups = [args.only] if args.only else ["video", "image"] + (["voice"] if args.voice else [])
+    groups = [args.only] if args.only else ["video", "image"] + (["voice"] if args.voice or args.from_github else [])
     for group in groups:
         print(f"\n== {group} ==", flush=True)
         if group == "video":
             download_h3(H3_VIDEO)
         elif group == "image":
             download_h3(H3_IMAGE)
+        elif args.from_github:
+            download_voice_github()
         else:
             download_voice()
     print("\n全部完成", flush=True)

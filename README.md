@@ -53,6 +53,8 @@ bash scripts/install_services.sh
 
 `download_models.sh` 也可以只下其中一类，例如 `--only video`、`--only image` 或 `--only voice`。
 
+配音模型（IndexTTS-2.5 约 7.7 GB，加人声分离模型）也备份在私有仓库 [ppyeer/ai-studio-models](https://github.com/ppyeer/ai-studio-models) 的 Release 里。ModelScope 不通或想跟本机用同一份时，先 `gh auth login`，再运行 `bash scripts/download_models.sh --only voice --from-github`。下载完会核对 SHA256 并解包到 `models/IndexTTS-2.5`。
+
 不想装成服务的话，可以开两个终端，分别运行 `bash scripts/run_comfyui.sh` 和 `bash scripts/run_server.sh`。
 
 ### 字体
