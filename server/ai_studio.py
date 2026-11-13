@@ -1528,6 +1528,11 @@ class AiStudio:
                 raise AiStudioError("分集不存在")
             if any(job.get("final") and job.get("episode") == episode_id and job.get("status") in ACTIVE for job in self.jobs):
                 raise AiStudioError("这一集正在合成")
+            # 承上解说只能靠配音出声：没配好就合成，成片开头会少掉这一段
+            if any(item.get("episode") == episode_id and item.get("status") in VOICE_ACTIVE for item in self.voices):
+                raise AiStudioError("这一集还有配音在生成，配完再合成")
+            if str(episode.get("recap") or "").strip() and not self._current_voice(episode, RECAP):
+                raise AiStudioError("承上解说还没配音（或文字改过），先在「配音」里生成，再合成成片")
             takes = self._shot_takes(series_id, episode)
             fmt = takes[0].get("format") or "portrait"
             width, height = {"portrait": (1080, 1920), "landscape": (1920, 1080), "square": (1080, 1080)}.get(fmt, (1080, 1920))
